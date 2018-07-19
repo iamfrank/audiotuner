@@ -75,8 +75,6 @@
     <body>
 
         <h1>Audio Analyser</h1>
-
-        <div id="soundinfo"></div>
         
         <div id="pitch">
             <h2>
@@ -94,7 +92,7 @@
 
             var notes = calcNotes(),
                 current_note = notes[9],
-                pitch_samples = [],
+                strong_pitch = [0,0],
                 hz_target = document.getElementById('hz-target'),
                 hz_current = document.getElementById('hz-current');
 
@@ -161,55 +159,46 @@
             };
 
 
-            function getAndDisplayAudioContext(stream) {
+            function initAudioContext(stream) {
 
                 // create audio context and analyser
                 var actx = new (window.AudioContext || window.webkitAudioContext)(), 
                     analyser = actx.createAnalyser(),
-                    sampleRate = actx.sampleRate,
                     mic = actx.createMediaStreamSource(stream),
-                    display1 = document.getElementById('soundinfo'),
                     canvas = document.getElementById("canvas-soundinfo"),
-                    ctx = canvas.getContext("2d"), // Get canvas context;
-                    lastItem = null,
-                    lastPos = null;
-
-                function draw() {
-                    let signal_str = 0;
-                    requestAnimationFrame(draw);
-                    analyser.getByteTimeDomainData(dataArray);
-                    ctx.clearRect(0,0,canvas.width, canvas.height);
-
-                    dataArray.forEach((item, i) => {
-                        if (item > 128 && lastItem <= 128) { // we have crossed below the mid point
-                            const elapsedSteps = i - lastPos; // how far since the last time we did this
-                            const pitch = Math.round( sampleRate / elapsedSteps );
-                            lastPos = i;
-                            pitch_samples.push(pitch);
-                        };
-                        ctx.fillRect(i, item, 1, 1);
-                        lastItem = item;
-                    });
-                };
-
-                ctx.fillStyle = 'white';
-                analyser.fftSize = 4096;
-                analyser.smoothingTimeConstant = 1;
-                var dataArray = new Uint8Array(analyser.fftSize);
+                    ctx = canvas.getContext("2d"), // Get canvas context
+                    cheight = canvas.height,
+                    j = 0;
 
                 // Connect microphone to analyser
                 mic.connect(analyser);
 
-                display1.innerHTML = 'FFT size: ' + analyser.fftSize
-                                    + '; Freq bin count: ' + analyser.frequencyBinCount
-                                    + '; Sample rate (samples pr sec): ' + actx.sampleRate
-                                    + '; Smooting time constant: ' + analyser.smoothingTimeConstant;
+                analyser.fftSize = 4096;
+                ctx.fillStyle = 'white';
+
+                var bufferLength = analyser.frequencyBinCount;
+                var dataArray = new Uint8Array(bufferLength);
+
+                function draw() {
+                    requestAnimationFrame(draw);
+                    analyser.getByteFrequencyData(dataArray);
+
+                    ctx.clearRect(0,0,canvas.width, cheight);
+                    for(var i = 0; i < bufferLength; i++) {
+                        j = dataArray[i];
+                        if (j > strong_pitch[0]) {
+                            strong_pitch = [j,i];
+                        };
+                        ctx.fillRect(i,cheight,1,-j);
+                        
+                    };
+                };
 
                 // Visualise audio using analyser data
                 draw();
             };
 
-
+/*
             function calcNote(hz) {
                 var n = Math.round(12*(Math.log2(hz/440))+57),
                     note = notes[n];
@@ -230,19 +219,14 @@
                     analysePitch(pitch_samples);
                 }, 1000);
             };
+*/
 
-
-            function visualizePitch(hz) {
-                if (hz > 16 && hz < 7902) {
-                    var note = calcNote(hz);
-                    hz_target.innerHTML = note.key + '<sub>' + note.octave + '</sub>' + ' (' + note.hz + 'hz)';
-                    hz_current.innerHTML = hz + 'hz';
-                    hz_current.style.left = `${ hz - note.hz }px`;
-                } else {
-                    hz_target.innerHTML = 'Unknown key';
-                    hz_current.innerHTML = '- hz';
-                    hz_current.style.left = '0px';
-                }
+            function visualizePitch() {
+                hz_current.innerHTML = strong_pitch;
+                strong_pitch = [0,0];
+                setTimeout(function() {
+                    visualizePitch();
+                }, 2000);
             };
 
 
@@ -250,8 +234,8 @@
                 if (navigator.mediaDevices) {
                     navigator.mediaDevices.getUserMedia({ audio: true })
                         .then(function(stream) {
-                            analysePitch(pitch_samples);
-                            getAndDisplayAudioContext(stream)
+                            initAudioContext(stream);
+                            visualizePitch();
                         })
                         .catch(function(err) {
                             console.log(err)
