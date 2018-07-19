@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, minimum-scale=1, initial-scale=1, user-scalable=yes">
+        <title>Audio Analyser</title>
+        <meta name="description" content="An audio tuner webapp">
+
+        <style>
+
+            body {
+                font: 1em/1.3 monospace;
+                padding: 1rem;
+                background-color: hsl(100,75%,10%);
+                color: hsl(100,75%,66%);
+                text-align: center;
+                display: flex;
+                flex-flow: column nowrap;
+                align-items: center;
+                justify-content: space-around;
+                text-shadow: 0 0 .5rem hsl(100,75%,66%);
+            }
+
+            h1 {
+                max-width: 50vh;
+                font-weight: normal;
+                text-transform: uppercase;
+                font-size: 2rem;
+                margin: 1rem 0 0;
+                padding: 0;
+            }
+
+            #soundinfo {
+                display: flex;
+                flex-flow: row nowrap;
+                justify-content: space-around;
+                align-items: center;
+                width: 100%;
+                padding: 2rem;
+            }
+
+            #canvas-soundinfo {
+                width: 100%;
+                height: 256px;
+                border: solid 1px hsl(100,75%,33%);
+                box-shadow: inset 0 0 .5rem hsl(100,75%,33%);
+                margin: 1rem 0;
+            }
+
+            #pitch {
+                width: 100%;
+            }
+
+            #pitch h2 {
+                text-align: center;
+            }
+
+            #pitch-visualizer {
+                text-align: center;
+            }
+
+            #hz-current {
+                position: relative;
+                background-color: hsl(100,75%,66%);
+                color: hsl(100,75%,10%);
+                padding: .5rem;
+                border-radius: .5rem;
+                width: 4rem;
+                display: inline-block;
+                transition: left .33s;
+            }
+
+        </style>
+    </head>
+    <body>
+
+        <h1>Audio Analyser</h1>
+
+        <div id="soundinfo"></div>
+        
+        <div id="pitch">
+            <h2>
+                Target note<br>
+                <span id="hz-target">Unknown key</span>
+            </h2>
+            <div id="pitch-visualizer">
+                <span id="hz-current">- hz</span>
+            </div>
+        </div>
+
+        <canvas id="canvas-soundinfo" height="256" width="2048"></canvas>
+
+        <script>
+
+            var notes = calcNotes(),
+                current_note = notes[9],
+                pitch_samples = [],
+                hz_target = document.getElementById('hz-target'),
+                hz_current = document.getElementById('hz-current');
+
+
+            function calcNotes() {
+                var notes = [],
+                    i = 1;
+                for (var octave = 0; octave <= 8; octave++) {
+                    // Calc sets of notes for 8 octaves
+                    for (var halfnote = 1; halfnote <= 12; halfnote++ ) {
+                        var note = {
+                            key: '',
+                            octave: octave,
+                            hz: 0
+                        };        
+                        switch(halfnote) {
+                            case 1:
+                                note.key = 'C';
+                                break;
+                            case 2:
+                                note.key = 'C#';
+                                break;
+                            case 3:
+                                note.key = 'D';
+                                break;
+                            case 4:
+                                note.key = 'Eb';
+                                break;
+                            case 5:
+                                note.key = 'E';
+                                break;
+                            case 6:
+                                note.key = 'F';
+                                break;
+                            case 7:
+                                note.key = 'F#';
+                                break;
+                            case 8:
+                                note.key = 'G';
+                                break;
+                            case 9:
+                                note.key = 'Ab';
+                                break;
+                            case 10:
+                                note.key = 'A';
+                                break;
+                            case 11:
+                                note.key = 'A#';
+                                break;
+                            case 12:
+                                note.key = 'B';
+                                break;
+                            default:
+                                console.log('something went wrong');
+                        };
+                        note.hz = Math.round(Math.pow(2,((i-58)/12)) * 440);
+                        notes.push(note);
+                        i++;
+                    };
+                };
+                console.log('An array of notes:');
+                console.log(notes);
+                return notes;
+            };
+
+
+            function getAndDisplayAudioContext(stream) {
+
+                // create audio context and analyser
+                var actx = new (window.AudioContext || window.webkitAudioContext)(), 
+                    analyser = actx.createAnalyser(),
+                    sampleRate = actx.sampleRate,
+                    mic = actx.createMediaStreamSource(stream),
+                    display1 = document.getElementById('soundinfo'),
+                    canvas = document.getElementById("canvas-soundinfo"),
+                    ctx = canvas.getContext("2d"), // Get canvas context;
+                    lastItem = null,
+                    lastPos = null;
+
+                function draw() {
+                    let signal_str = 0;
+                    requestAnimationFrame(draw);
+                    analyser.getByteTimeDomainData(dataArray);
+                    ctx.clearRect(0,0,canvas.width, canvas.height);
+
+                    dataArray.forEach((item, i) => {
+                        if (item > 128 && lastItem <= 128) { // we have crossed below the mid point
+                            const elapsedSteps = i - lastPos; // how far since the last time we did this
+                            const pitch = Math.round( sampleRate / elapsedSteps );
+                            lastPos = i;
+                            pitch_samples.push(pitch);
+                        };
+                        ctx.fillRect(i, item, 1, 1);
+                        lastItem = item;
+                    });
+                };
+
+                ctx.fillStyle = 'white';
+                analyser.fftSize = 4096;
+                analyser.smoothingTimeConstant = 1;
+                var dataArray = new Uint8Array(analyser.fftSize);
+
+                // Connect microphone to analyser
+                mic.connect(analyser);
+
+                display1.innerHTML = 'FFT size: ' + analyser.fftSize
+                                    + '; Freq bin count: ' + analyser.frequencyBinCount
+                                    + '; Sample rate (samples pr sec): ' + actx.sampleRate
+                                    + '; Smooting time constant: ' + analyser.smoothingTimeConstant;
+
+                // Visualise audio using analyser data
+                draw();
+            };
+
+
+            function calcNote(hz) {
+                var n = Math.round(12*(Math.log2(hz/440))+57),
+                    note = notes[n];
+                return note;
+            };
+
+
+            function analysePitch(samples_arr) {
+                samples_arr = samples_arr.sort( function(a,b) {return a - b;} );
+
+                let idx = Math.floor(samples_arr.length/2),
+                    median_hz = samples_arr[idx];
+                if (idx > 0) {
+                    visualizePitch(median_hz);
+                }
+                pitch_samples = [];
+                setTimeout(function() {
+                    analysePitch(pitch_samples);
+                }, 1000);
+            };
+
+
+            function visualizePitch(hz) {
+                if (hz > 16 && hz < 7902) {
+                    var note = calcNote(hz);
+                    hz_target.innerHTML = note.key + '<sub>' + note.octave + '</sub>' + ' (' + note.hz + 'hz)';
+                    hz_current.innerHTML = hz + 'hz';
+                    hz_current.style.left = `${ hz - note.hz }px`;
+                } else {
+                    hz_target.innerHTML = 'Unknown key';
+                    hz_current.innerHTML = '- hz';
+                    hz_current.style.left = '0px';
+                }
+            };
+
+
+            function checkWebAudioCapability() {
+                if (navigator.mediaDevices) {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(function(stream) {
+                            analysePitch(pitch_samples);
+                            getAndDisplayAudioContext(stream)
+                        })
+                        .catch(function(err) {
+                            console.log(err)
+                        })
+                };
+            };
+
+
+            checkWebAudioCapability();
+
+        </script>
+
+    </body>
+</html>
