@@ -4,89 +4,126 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, minimum-scale=1, initial-scale=1, user-scalable=yes">
         <title>Audio Analyser</title>
-        <meta name="description" content="An audio tuner webapp">
+        <meta name="description" content="An audio analyser webapp useful for tuning instruments">
 
         <style>
 
             body {
                 font: 1em/1.3 monospace;
-                padding: 1rem;
+                margin: 0;
+                padding: 0;
                 background-color: hsl(100,75%,10%);
                 color: hsl(100,75%,66%);
-                text-align: center;
-                display: flex;
-                flex-flow: column nowrap;
-                align-items: center;
-                justify-content: space-around;
                 text-shadow: 0 0 .5rem hsl(100,75%,66%);
+                position: relative;
+                width: 100vw;
+                height: 100vh;
             }
 
             h1 {
-                max-width: 50vh;
+                position: absolute;
+                top: 2rem;
+                width: 100%;
+                text-align: center;
                 font-weight: normal;
                 text-transform: uppercase;
-                font-size: 2rem;
-                margin: 1rem 0 0;
+                font-size: 1.3rem;
+                margin: 0 0 1rem;
                 padding: 0;
             }
 
-            #soundinfo {
-                display: flex;
-                flex-flow: row nowrap;
-                justify-content: space-around;
-                align-items: center;
-                width: 100%;
-                padding: 2rem;
-            }
-
-            #canvas-soundinfo {
-                width: 100%;
-                height: 256px;
-                border: solid 1px hsl(100,75%,33%);
-                box-shadow: inset 0 0 .5rem hsl(100,75%,33%);
-                margin: 1rem 0;
+            sub {
+                font-size: .5em;
             }
 
             #pitch {
-                width: 100%;
+                position: absolute;
+                width: 100vw;
+                height: 100vh;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                margin: 0;
+                z-index: 2;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
 
-            #pitch h2 {
-                text-align: center;
+            #pitch-pane {
+                background-color: hsl(300,75%,33%);
+                color: #fff;
+                border-radius: 50%;
+                height: 6rem;
+                width: 6rem;
+                display: flex;
+                flex-flow: column nowrap;
+                align-items: center;
+                justify-content: center;
             }
 
-            #pitch-visualizer {
-                text-align: center;
+            #note-target { 
+                margin: 0;
+                font-size: 1.75em;
+            }
+
+            #hz-target {
+                opacity: .75;
             }
 
             #hz-current {
-                position: relative;
+                position: absolute;
+                z-index: 3;
+                text-align: center;
                 background-color: hsl(100,75%,66%);
                 color: hsl(100,75%,10%);
-                padding: .5rem;
-                border-radius: .5rem;
-                width: 4rem;
+                padding: .25rem .75rem;
+                transition: all .5s;
+                top: 50%;
+                left: 0;
                 display: inline-block;
-                transition: left .33s;
+                width: auto;
+            }
+
+            #hz-current::after {
+                content: '';
+                background-color: hsl(100,75%,66%);
+                width: 1rem;
+                height: 1rem;
+                display: block;
+                transform: rotate(45deg);
+                position: absolute;
+                right: -.5rem;
+                top: .25rem;
+            }
+
+            #canvas-soundinfo {
+                position: absolute;
+                width: 100vw;
+                height: 100vh;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                margin: 0;
+                z-index: 1;
             }
 
         </style>
     </head>
     <body>
+    
+        <h1>Audio tuner</h1>                
 
-        <h1>Audio Analyser</h1>
-
-        <div id="soundinfo"></div>
-        
         <div id="pitch">
-            <h2>
-                Target note<br>
-                <span id="hz-target">Unknown key</span>
-            </h2>
-            <div id="pitch-visualizer">
-                <span id="hz-current">- hz</span>
+            <div id="pitch-pane">
+                <span id="note-target">?</span> 
+                <span id="hz-target"></span>    
             </div>
         </div>
+
+        <div id="hz-current">- hz</div>
 
         <canvas id="canvas-soundinfo" height="256" width="2048"></canvas>
 
@@ -95,6 +132,7 @@
             var notes = calcNotes(),
                 current_note = notes[9],
                 pitch_samples = [],
+                note_target = document.getElementById('note-target'),
                 hz_target = document.getElementById('hz-target'),
                 hz_current = document.getElementById('hz-current');
 
@@ -168,7 +206,6 @@
                     analyser = actx.createAnalyser(),
                     sampleRate = actx.sampleRate,
                     mic = actx.createMediaStreamSource(stream),
-                    display1 = document.getElementById('soundinfo'),
                     canvas = document.getElementById("canvas-soundinfo"),
                     ctx = canvas.getContext("2d"), // Get canvas context;
                     lastItem = null,
@@ -200,11 +237,6 @@
                 // Connect microphone to analyser
                 mic.connect(analyser);
 
-                display1.innerHTML = 'FFT size: ' + analyser.fftSize
-                                    + '; Freq bin count: ' + analyser.frequencyBinCount
-                                    + '; Sample rate (samples pr sec): ' + actx.sampleRate
-                                    + '; Smooting time constant: ' + analyser.smoothingTimeConstant;
-
                 // Visualise audio using analyser data
                 draw();
             };
@@ -213,6 +245,7 @@
             function calcNote(hz) {
                 var n = Math.round(12*(Math.log2(hz/440))+57),
                     note = notes[n];
+                    note.hz_range = notes[n+1].hz - notes[n-1].hz;
                 return note;
             };
 
@@ -222,6 +255,7 @@
 
                 let idx = Math.floor(samples_arr.length/2),
                     median_hz = samples_arr[idx];
+
                 if (idx > 0) {
                     visualizePitch(median_hz);
                 }
@@ -234,14 +268,19 @@
 
             function visualizePitch(hz) {
                 if (hz > 16 && hz < 7902) {
-                    var note = calcNote(hz);
-                    hz_target.innerHTML = note.key + '<sub>' + note.octave + '</sub>' + ' (' + note.hz + 'hz)';
+
+                    var note = calcNote(hz),
+                        ratio = (hz - note.hz) / note.hz_range * 100;
+                    
+                    note_target.innerHTML = note.key + '<sub>' + note.octave + '</sub>';
+                    hz_target.innerHTML = note.hz + 'hz';
                     hz_current.innerHTML = hz + 'hz';
-                    hz_current.style.left = `${ hz - note.hz }px`;
+                    hz_current.style.top = `${ ratio + 50 }%`;
+                    console.log(ratio);
+
                 } else {
-                    hz_target.innerHTML = 'Unknown key';
-                    hz_current.innerHTML = '- hz';
-                    hz_current.style.left = '0px';
+                    hz_target.innerHTML = '-';
+                    hz_current.style.top = '110%';
                 }
             };
 
