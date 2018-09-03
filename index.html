@@ -270,27 +270,43 @@
             };
 
 
-            function initAudioContext(stream) {
+            function getAndDisplayAudioContext(stream) {
 
                 // create audio context and analyser
                 var actx = new (window.AudioContext || window.webkitAudioContext)(), 
                     analyser = actx.createAnalyser(),
-                    sample_rate = actx.sampleRate,
+                    sampleRate = actx.sampleRate,
                     mic = actx.createMediaStreamSource(stream),
                     canvas = document.getElementById("canvas-soundinfo"),
-                    ctx = canvas.getContext("2d"), // Get canvas context
-                    cheight = canvas.height,
-                    j = 0;
+                    ctx = canvas.getContext("2d"), // Get canvas context;
+                    lastItem = null,
+                    lastPos = null;
 
-                
+                function draw() {
+                    let signal_str = 0;
+                    requestAnimationFrame(draw);
+                    analyser.getByteTimeDomainData(dataArray);
+                    ctx.clearRect(0,0,canvas.width, canvas.height);
+
+                    dataArray.forEach((item, i) => {
+                        if (item > 128 && lastItem <= 128) { // we have crossed below the mid point
+                            const elapsedSteps = i - lastPos; // how far since the last time we did this
+                            const pitch = Math.round( sampleRate / elapsedSteps );
+                            lastPos = i;
+                            pitch_samples.push(pitch);
+                        };
+                        ctx.fillRect(i, item, 1, 1);
+                        lastItem = item;
+                    });
+                };
+
+                ctx.fillStyle = 'white';
+                analyser.fftSize = 4096;
+                analyser.smoothingTimeConstant = 1;
+                var dataArray = new Uint8Array(analyser.fftSize);
+
                 // Connect microphone to analyser
                 mic.connect(analyser);
-
-                analyser.fftSize = 4096;
-                ctx.fillStyle = 'white';
-
-                var bufferLength = analyser.frequencyBinCount;
-                var dataArray = new Uint8Array(bufferLength);
 
                 // Visualise audio using analyser data
                 draw();
@@ -344,8 +360,8 @@
                 if (navigator.mediaDevices) {
                     navigator.mediaDevices.getUserMedia({ audio: true })
                         .then(function(stream) {
-                            initAudioContext(stream);
-                            visualizePitch();
+                            analysePitch(pitch_samples);
+                            getAndDisplayAudioContext(stream)
                         })
                         .catch(function(err) {
                             console.log(err)
