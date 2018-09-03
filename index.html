@@ -30,15 +30,6 @@
                 padding: 0;
             }
 
-            #soundinfo {
-                display: flex;
-                flex-flow: row nowrap;
-                justify-content: space-around;
-                align-items: center;
-                width: 100%;
-                padding: 2rem;
-            }
-
             #canvas-soundinfo {
                 width: 100%;
                 height: 256px;
@@ -92,7 +83,7 @@
 
             var notes = calcNotes(),
                 current_note = notes[9],
-                strong_pitch = [0,0],
+                strong_pitch = [0,0,0,0],
                 hz_target = document.getElementById('hz-target'),
                 hz_current = document.getElementById('hz-current');
 
@@ -164,12 +155,14 @@
                 // create audio context and analyser
                 var actx = new (window.AudioContext || window.webkitAudioContext)(), 
                     analyser = actx.createAnalyser(),
+                    sample_rate = actx.sampleRate,
                     mic = actx.createMediaStreamSource(stream),
                     canvas = document.getElementById("canvas-soundinfo"),
                     ctx = canvas.getContext("2d"), // Get canvas context
                     cheight = canvas.height,
                     j = 0;
 
+                
                 // Connect microphone to analyser
                 mic.connect(analyser);
 
@@ -187,7 +180,7 @@
                     for(var i = 0; i < bufferLength; i++) {
                         j = dataArray[i];
                         if (j > strong_pitch[0]) {
-                            strong_pitch = [j,i];
+                            strong_pitch = [j,i,bufferLength,sample_rate];
                         };
                         ctx.fillRect(i,cheight,1,-j);
                         
@@ -222,8 +215,9 @@
 */
 
             function visualizePitch() {
-                hz_current.innerHTML = strong_pitch;
-                strong_pitch = [0,0];
+                const pitch = Math.floor( strong_pitch[1] * (strong_pitch[3]/2) / strong_pitch[2] );
+                hz_current.innerHTML = pitch + 'hz';
+                strong_pitch = [0,0,0,0];
                 setTimeout(function() {
                     visualizePitch();
                 }, 2000);
